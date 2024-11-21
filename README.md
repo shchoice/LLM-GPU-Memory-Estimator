@@ -1,3 +1,10 @@
+# LLM-GPU-Memory-Estimator
+* LLM System Requirements Calculator [Github](https://github.com/manuelescobar-dev/LLM-System-Requirements) 을 베이스로 사용하였습니다. LLM 모델들에 대한 GPU 메모리 사용량을 계산하는 툴입니다.
+* 기존 내용과 변경된점
+  - 웹 인터페이스 변경 : Streamlit → Gradio
+  - 단위 추가 : GB → GB, GiB 
+---
+
 **Available on:** [https://llm-system-requirements.streamlit.app](https://llm-system-requirements.streamlit.app)
 
 # LLM System Requirements Calculator

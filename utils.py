@@ -1,10 +1,8 @@
-import streamlit as st
-from config import DATA_TYPES, PARAMETERS, DATA_TYPE_SIZES, OPTIMIZERS
+from config import DATA_TYPE_SIZES, OPTIMIZERS
 
 
 # ----------------- Memory Functions ----------------- #
-@st.cache_data
-def get_memory(*args):
+def get_memory(*args, unit="GB"):
     """Convert total memory from bytes to human-readable format."""
     total = 0
     warning = False
@@ -13,24 +11,30 @@ def get_memory(*args):
             total += arg
         else:
             warning = True
+
+    # Define conversion factors
+    if unit == "GB":
+        KILO = 1000
+    else:  # GiB
+        KILO = 1024
+
     # Convert bytes to human-readable format
     if total == 0:
         result = ""
-    elif total < 1024:
+    elif total < KILO:
         result = f"{total} Bytes"
-    elif total < 1024**2:
-        result = f"{total / 1024:.2f} KB"
-    elif total < 1024**3:
-        result = f"{total / (1024**2):.2f} MB"
-    elif total < 1024**4:
-        result = f"{total / (1024**3):.2f} GB"
+    elif total < KILO ** 2:
+        result = f"{total / KILO:.2f} K{unit[1:]}"
+    elif total < KILO ** 3:
+        result = f"{total / (KILO ** 2):.2f} M{unit[1:]}"
+    elif total < KILO ** 4:
+        result = f"{total / (KILO ** 3):.2f} {unit}"
     else:
-        result = f"{total / (1024**4):.2f} TB"
+        result = f"{total / (KILO ** 4):.2f} T{unit[1:]}"
+
     result += " * " if warning else ""
     return result
 
-
-@st.cache_data
 def get_model_weights(model_size, precision):
     """Calculate the memory required for model weights."""
     try:
@@ -39,7 +43,6 @@ def get_model_weights(model_size, precision):
         return 0
 
 
-@st.cache_data
 def get_kv_cache(
     precision, batch_size, sequence_length, hidden_size, num_hidden_layers
 ):
@@ -57,7 +60,6 @@ def get_kv_cache(
         return 0
 
 
-@st.cache_data
 def get_activation_memory(
     batch_size, sequence_length, hidden_size, num_attention_heads
 ):
@@ -75,7 +77,6 @@ def get_activation_memory(
         return 0
 
 
-@st.cache_data
 def get_optimizer_memory(model_size, optimizer):
     """Calculate the memory required for optimizer."""
     try:
@@ -84,7 +85,6 @@ def get_optimizer_memory(model_size, optimizer):
         return 0
 
 
-@st.cache_data
 def get_gradient_memory(model_size, precision):
     """Calculate the memory required for gradients."""
     precision = "float32"
@@ -94,7 +94,6 @@ def get_gradient_memory(model_size, precision):
         return 0
 
 
-@st.cache_data
 def calculate_inference_memory(
     model_size,
     precision,
@@ -103,6 +102,7 @@ def calculate_inference_memory(
     hidden_size,
     num_hidden_layers,
     num_attention_heads,
+    memory_unit="GB"
 ):
     """Calculate the total memory required for inference."""
     model_weights = get_model_weights(model_size, precision)
@@ -113,14 +113,12 @@ def calculate_inference_memory(
         batch_size, sequence_length, hidden_size, num_attention_heads
     )
     return {
-        "model_weights": get_memory(model_weights),
-        "kv_cache": get_memory(kv_cache),
-        "activation_memory": get_memory(activation_memory),
-        "inference_memory": get_memory(model_weights, kv_cache, activation_memory),
+        "model_weights": get_memory(model_weights, unit=memory_unit),
+        "kv_cache": get_memory(kv_cache, unit=memory_unit),
+        "activation_memory": get_memory(activation_memory, unit=memory_unit),
+        "inference_memory": get_memory(model_weights, kv_cache, activation_memory, unit=memory_unit),
     }
 
-
-@st.cache_data
 def calculate_training_memory(
     model_size,
     precision,
@@ -131,6 +129,7 @@ def calculate_training_memory(
     num_attention_heads,
     optimizer,
     trainable_parameters,
+    memory_unit="GB"
 ):
     """Calculate the total memory required for training."""
     model_weights = get_model_weights(model_size, precision)
@@ -148,16 +147,17 @@ def calculate_training_memory(
     )
 
     return {
-        "model_weights": get_memory(model_weights),
-        "kv_cache": get_memory(kv_cache),
-        "activation_memory": get_memory(activation_memory),
-        "optimizer_memory": get_memory(optimizer_memory),
-        "gradients_memory": get_memory(gradients_memory),
+        "model_weights": get_memory(model_weights, unit=memory_unit),
+        "kv_cache": get_memory(kv_cache, unit=memory_unit),
+        "activation_memory": get_memory(activation_memory, unit=memory_unit),
+        "optimizer_memory": get_memory(optimizer_memory, unit=memory_unit),
+        "gradients_memory": get_memory(gradients_memory, unit=memory_unit),
         "training_memory": get_memory(
             model_weights,
             kv_cache,
             activation_memory,
             optimizer_memory,
             gradients_memory,
+            unit=memory_unit
         ),
     }

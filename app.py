@@ -1,8 +1,9 @@
-import streamlit as st
+import gradio as gr
 from config import (
     DATA_TYPES,
     PARAMETERS,
     OPTIMIZERS,
+    MEMORY_UNITS,
     load_predefined_models,
 )
 from utils import (
@@ -10,141 +11,144 @@ from utils import (
     calculate_training_memory,
 )
 
+def update_values(model_name):
+    """모델 선택에 따라 파라미터 값 업데이트"""
+    MODELS = load_predefined_models()
+    if model_name in MODELS:
+        model_info = MODELS[model_name]
+        return [
+            model_info.get(PARAMETERS["model_size"], None),
+            model_info.get(PARAMETERS["precision"], DATA_TYPES[0]),
+            model_info.get(PARAMETERS["hidden_size"], None),
+            model_info.get(PARAMETERS["num_hidden_layers"], None),
+            model_info.get(PARAMETERS["num_attention_heads"], None),
+        ]
+    return [None, DATA_TYPES[0], None, None, None]
 
-# ----------------- Streamlit Setup ----------------- #
-st.set_page_config(page_title="LLM Memory Requirements")
-st.title("LLM Memory Requirements")
+def calculate_memory(
+    model_name, model_size, precision, batch_size, sequence_length,
+    hidden_size, num_hidden_layers, num_attention_heads,
+    optimizer, trainable_parameters, memory_unit
+):
+    """메모리 계산 및 결과 반환"""
+    inference_memory = calculate_inference_memory(
+        model_size, precision, batch_size, sequence_length,
+        hidden_size, num_hidden_layers, num_attention_heads,
+        memory_unit
+    )
 
+    training_memory = calculate_training_memory(
+        model_size, precision, batch_size, sequence_length,
+        hidden_size, num_hidden_layers, num_attention_heads,
+        optimizer, trainable_parameters, memory_unit
+    )
 
-# ----------------- Sidebar Initialization ----------------- #
-MODELS = load_predefined_models()
+    return (
+        f"Inference Memory:\n"
+        f"Total: {inference_memory['inference_memory']}\n"
+        f"Model Weights: {inference_memory['model_weights']}\n"
+        f"KV Cache: {inference_memory['kv_cache']}\n"
+        f"Activation Memory: {inference_memory['activation_memory']}\n\n"
+        f"Training Memory:\n"
+        f"Total: {training_memory['training_memory']}\n"
+        f"Model Weights: {training_memory['model_weights']}\n"
+        f"KV Cache: {training_memory['kv_cache']}\n"
+        f"Activation Memory: {training_memory['activation_memory']}\n"
+        f"Optimizer Memory: {training_memory['optimizer_memory']}\n"
+        f"Gradients Memory: {training_memory['gradients_memory']}"
+    )
 
+def create_interface():
+    MODELS = load_predefined_models()
 
-def set_values():
-    """Update the values based on the selected model"""
-    if st.session_state.model in MODELS:
-        model_info = MODELS[st.session_state.model]
-        for param in PARAMETERS:
-            if PARAMETERS[param] in model_info:
-                st.session_state[param] = model_info[PARAMETERS[param]]
-            else:
-                st.session_state[param] = None
-    else:
-        for param in PARAMETERS:
-            st.session_state[param] = None
+    with gr.Blocks(title="LLM Memory Requirements") as demo:
+        gr.Markdown("# LLM Memory Requirements")
 
+        with gr.Row():
+            with gr.Column():
+                model = gr.Dropdown(
+                    choices=list(MODELS.keys()),
+                    label="Select Pre-defined Model"
+                )
+                model_size = gr.Number(
+                    label="Number of parameters (in billions)",
+                    minimum=0,
+                    step=1
+                )
+                precision = gr.Dropdown(
+                    choices=DATA_TYPES,
+                    label="Precision",
+                    value=DATA_TYPES[0]
+                )
+                batch_size = gr.Number(
+                    label="Batch Size",
+                    minimum=0,
+                    step=1,
+                    value=1
+                )
+                sequence_length = gr.Number(
+                    label="Sequence Length",
+                    minimum=0,
+                    step=1,
+                    value=2048
+                )
 
-# ----------------- Sidebar UI ----------------- #
-# Model Selection
-model = st.sidebar.selectbox(
-    "Model", list(MODELS.keys()), index=None, on_change=set_values, key="model"
-)
+            with gr.Column():
+                hidden_size = gr.Number(
+                    label="Hidden Size",
+                    minimum=0,
+                    step=1
+                )
+                num_hidden_layers = gr.Number(
+                    label="Number of Layers",
+                    minimum=0,
+                    step=1
+                )
+                num_attention_heads = gr.Number(
+                    label="Number of Attention Heads",
+                    minimum=0,
+                    step=1
+                )
+                optimizer = gr.Dropdown(
+                    choices=list(OPTIMIZERS.keys()),
+                    label="Optimizer",
+                    value=list(OPTIMIZERS.keys())[0]
+                )
+                trainable_parameters = gr.Slider(
+                    minimum=0,
+                    maximum=100,
+                    value=100,
+                    step=1,
+                    label="Percentage of trainable parameters"
+                )
+                memory_unit = gr.Radio(
+                    choices=MEMORY_UNITS,
+                    label="Memory Unit",
+                    value=MEMORY_UNITS[0]
+                )
 
-# Parameters
-model_size = st.sidebar.number_input(
-    "Number of parameters (in billions)",
-    min_value=0,
-    step=1,
-    value=None,
-    key="model_size",
-    help="Number of parameters in the model in billions",
-)
-precision = st.sidebar.selectbox(
-    "Precision",
-    DATA_TYPES,
-    index=None,
-    key="precision",
-    help="Data type used (int 8 and int 4 are for quantization)",
-)
-batch_size = st.sidebar.number_input(
-    "Batch Size",
-    min_value=0,
-    step=1,
-    value=1,
-    key="batch_size",
-)
-sequence_length = st.sidebar.number_input(
-    "Sequence Length",
-    min_value=0,
-    step=1,
-    value=2048,
-    key="sequence_length",
-    help="Number of tokens in the input sequence.",
-)
-hidden_size = st.sidebar.number_input(
-    "Hidden Size",
-    min_value=0,
-    step=1,
-    value=None,
-    key="hidden_size",
-    help="Size of the hidden layer (given by the model card).",
-)
-num_hidden_layers = st.sidebar.number_input(
-    "Number of Layers",
-    min_value=0,
-    step=1,
-    value=None,
-    key="num_hidden_layers",
-    help="Number of layers in the model (given by the model card).",
-)
-num_attention_heads = st.sidebar.number_input(
-    "Number of Attention Heads",
-    min_value=0,
-    step=1,
-    value=None,
-    key="num_attention_heads",
-    help="Number of attention heads in the model (given by the model card).",
-)
+        output = gr.Textbox(label="Memory Requirements", lines=10)
 
+        # 이벤트 핸들러 연결
+        model.change(
+            fn=update_values,
+            inputs=[model],
+            outputs=[model_size, precision, hidden_size, num_hidden_layers, num_attention_heads]
+        )
 
-# ----------------- Main Screen UI ----------------- #
-# Dividing the screen into two tabs
-inference, training = st.tabs(["Inference", "Training"])
+        calculate_btn = gr.Button("Calculate Memory")
+        calculate_btn.click(
+            fn=calculate_memory,
+            inputs=[
+                model, model_size, precision, batch_size, sequence_length,
+                hidden_size, num_hidden_layers, num_attention_heads,
+                optimizer, trainable_parameters, memory_unit
+            ],
+            outputs=[output]
+        )
 
-# Tab 2: Training
-training1, training2 = training.columns(2)
-optimizer = training2.selectbox("Optimizer", list(OPTIMIZERS.keys()), key="optimizer")
-trainable_parameters = training2.slider(
-    "Percentage of trainable parameters", 0, 100, 100, key="trainable_params"
-)
+    return demo
 
-# Inference Memory
-inference_memory = calculate_inference_memory(
-    model_size,
-    precision,
-    batch_size,
-    sequence_length,
-    hidden_size,
-    num_hidden_layers,
-    num_attention_heads,
-)
-
-inference.write(f"**Total Inference Memory**: {inference_memory['inference_memory']}")
-inference.write(f"- **Model Weights**: {inference_memory['model_weights']}")
-inference.write(f"- **KV Cache**: {inference_memory['kv_cache']}")
-inference.write(f"- **Activation Memory**: {inference_memory['activation_memory']}")
-
-
-# Training Memory
-training_memory = calculate_training_memory(
-    model_size,
-    precision,
-    batch_size,
-    sequence_length,
-    hidden_size,
-    num_hidden_layers,
-    num_attention_heads,
-    optimizer,
-    trainable_parameters,
-)
-
-training1.write(f"**Total Training Memory**: {training_memory['training_memory']}")
-training1.write(f"- **Model Weights**: {training_memory['model_weights']}")
-training1.write(f"- **KV Cache**: {training_memory['kv_cache']}")
-training1.write(f"- **Activation Memory**: {training_memory['activation_memory']}")
-training1.write(f"- **Optimizer Memory**: {training_memory['optimizer_memory']}")
-training1.write(f"- **Gradients Memory**: {training_memory['gradients_memory']}")
-
-# ----------------- Error Handling ----------------- #
-if None in st.session_state.values():
-    st.warning("Some information is missing.")
+if __name__ == "__main__":
+    demo = create_interface()
+    demo.launch()

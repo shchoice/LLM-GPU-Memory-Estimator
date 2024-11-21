@@ -1,4 +1,3 @@
-import streamlit as st
 import os
 import json
 
@@ -18,6 +17,9 @@ OPTIMIZERS = {
     "SGD": 4,
 }
 
+# Memory units
+MEMORY_UNITS = ["GB", "GiB"]
+
 # Available data types
 DATA_TYPES = list(DATA_TYPE_SIZES.keys())
 
@@ -31,8 +33,6 @@ PARAMETERS = {
     "num_key_value_heads": "num_key_value_heads",
 }
 
-
-@st.cache_data
 def load_predefined_models() -> dict:
     """Load model configurations from the 'predefined_models' folder."""
     models = {}
